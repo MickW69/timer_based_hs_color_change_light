@@ -1,0 +1,64 @@
+blueprint:
+  name: Timer based HS color change light
+  description: Control light based on selected timer using color changes
+  domain: automation
+  input:
+    timer_select:
+      name: Select Timer
+      description: The timer entity
+      selector:
+        entity:
+          domain: timer
+    light_select:
+      name: Select Light
+      description: The light entity to change color
+      selector:
+        entity:
+          domain: light
+
+trigger:
+  - platform: state
+    entity_id: !input timer_select
+    to: active
+    from: idle
+
+condition: []
+
+action:
+  - repeat:
+      while:
+        - condition: state
+          entity_id: !input timer_select
+          state: active
+      sequence:
+        - variables:
+            selected_timer: !input timer_select
+            duration: "{{ state_attr(selected_timer, 'duration') }}"
+            parts: "{{ duration.split(':') }}"
+            dhours: "{{ parts[0] | int }}"
+            dminutes: "{{ parts[1] | int }}"
+            dseconds: "{{ parts[2] | int }}"
+            timer_duration: "{{ (dhours * 3600 + dminutes * 60 + dseconds) }}"
+            scale_duration: "{{ timer_duration / 120 }}"
+            finish_at: "{{ state_attr(selected_timer, 'finishes_at') }}"
+            seconds: "{{ (as_timestamp(finish_at) - as_timestamp(now())) | int }}"
+            scale_rem_time: "{{ (seconds / scale_duration) | int }}"
+            timer_col: "{{ ([0, scale_rem_time, 120] | sort)[1] }}"
+        - service: light.turn_on
+          data:
+            hs_color:
+              - "{{ timer_col }}"
+              - 100
+          target:
+            entity_id: !input light_select
+        - delay:
+            seconds: 15
+  - service: light.turn_on
+    data:
+      hs_color:
+        - 0
+        - 100
+    target:
+      entity_id: !input light_select
+
+mode: single
