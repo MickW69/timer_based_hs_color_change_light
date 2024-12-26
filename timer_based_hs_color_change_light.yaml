@@ -1,6 +1,6 @@
 blueprint:
-  name: Timer based HS color change light
-  description: Control light based on selected timer using color changes
+  name: Dynamic Timer Light Color Transition
+  description: This blueprint transitions a light's color smoothly from red to green or green to red based on the progress of a selected timer.
   domain: automation
   input:
     timer_select:
@@ -15,6 +15,14 @@ blueprint:
       selector:
         entity:
           domain: light
+    direction:
+      name: Transition Direction
+      description: Choose the direction of the color transition
+      selector:
+        select:
+          options:
+            - red_to_green
+            - green_to_red
 
 trigger:
   - platform: state
@@ -39,15 +47,18 @@ action:
             dminutes: "{{ parts[1] | int }}"
             dseconds: "{{ parts[2] | int }}"
             timer_duration: "{{ (dhours * 3600 + dminutes * 60 + dseconds) }}"
-            scale_duration: "{{ timer_duration / 120 }}"
             finish_at: "{{ state_attr(selected_timer, 'finishes_at') }}"
             seconds: "{{ (as_timestamp(finish_at) - as_timestamp(now())) | int }}"
-            scale_rem_time: "{{ (seconds / scale_duration) | int }}"
-            timer_col: "{{ ([0, scale_rem_time, 120] | sort)[1] }}"
+            hue: >-
+              {% if (seconds / timer_duration) * 120 >= 0 and direction == 'red_to_green' %}
+                {{ (seconds / timer_duration) * 120 }}
+              {% else %}
+                {{ 120 - ((seconds / timer_duration) * 120) }}
+              {% endif %}
         - service: light.turn_on
           data:
             hs_color:
-              - "{{ timer_col }}"
+              - "{{ hue | round(0) }}"
               - 100
           target:
             entity_id: !input light_select
@@ -56,7 +67,12 @@ action:
   - service: light.turn_on
     data:
       hs_color:
-        - 0
+        - >-
+          {% if direction == 'red_to_green' %}
+            120
+          {% else %}
+            0
+          {% endif %}
         - 100
     target:
       entity_id: !input light_select
